@@ -4,6 +4,7 @@ import javax.xml.crypto.Data;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
@@ -14,8 +15,12 @@ public class ChatServer {
 
 
     public static void main(String[] args) {
-
         DatabaseManager db = DatabaseManager.getInstance();
+
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            db.closeConnection();
+            System.out.println("Сервер завершен.");
+        }));
 
 
         try (ServerSocket serverSocket = new ServerSocket(PORT)) {
@@ -36,11 +41,6 @@ public class ChatServer {
             System.err.println("Ошибка сервера " + e.getMessage());
             e.printStackTrace();
         }
-
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            db.closeConnection();
-            System.out.println("Сервер завершен.");
-        }));
     }
 
     public static void addClient(ClientHandler client){
@@ -49,6 +49,14 @@ public class ChatServer {
 
     public static void removeClient(ClientHandler client){
         clients.remove(client);
+    }
+
+    public static List<String> getAllOnlineUsersNicks(){
+        List<String> onlineUsers = new ArrayList<>();
+        for(ClientHandler client : clients){
+            onlineUsers.add(client.getName());
+        }
+        return onlineUsers;
     }
 
     public static void broadcast (String message, ClientHandler sender){

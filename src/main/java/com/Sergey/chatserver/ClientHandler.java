@@ -3,9 +3,7 @@ package com.Sergey.chatserver;
 import java.io.*;
 import java.net.Socket;
 import java.sql.PreparedStatement;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Locale;
+import java.util.*;
 
 public class ClientHandler implements Runnable {
     private Socket socket;
@@ -30,7 +28,7 @@ public class ClientHandler implements Runnable {
             out.println("SERVER: Добро пожаловать в чат \n" +
                     "Пожалуйста войдите или зарегистрируйтесь");
             out.println("Доступные команды: \n" +
-                    "/register <Login> <password> \n" +
+                    "/register <Login> <password> <Nick> \n" +
                     "/login <Login> <Password>\n" +
                     "/exit");
 
@@ -44,7 +42,7 @@ public class ClientHandler implements Runnable {
                 } else {
                     ChatServer.broadcast(name + ": " + message, this);
                     DatabaseManager db = DatabaseManager.getInstance();
-                    db.saveMessage(this.name, null, message, false);
+                    db.saveMessage(this.login, null, message, false);
                 }
             }
 
@@ -120,7 +118,7 @@ public class ClientHandler implements Runnable {
                 } else {
                     recipient.sendMessage("(Лично от " + this.getName() + "):  " + privateMessage);
                     this.sendMessage("(Лично для " + recipientName + "):  " + privateMessage);
-                    db.saveMessage(this.name, recipientName, privateMessage, true);
+                    db.saveMessage(this.login, recipient.getLogin(), privateMessage, true);
                 }
                 break;
 
@@ -171,9 +169,9 @@ public class ClientHandler implements Runnable {
                     return;
                 }
                 parts = command.split(" ", 3);
-                if (parts.length < 3){
+                if (parts.length < 3 || parts[2].isEmpty()){
                     out.println("ОШИБКА - Введите Логин и Пароль для входа в систему \n" +
-                            "Пример - /login Login Password" );
+                            "Пример - /login <Login> <Password>" );
                     return;
                 }
                 String login = parts[1];
@@ -183,24 +181,29 @@ public class ClientHandler implements Runnable {
                 try {
                     boolean authenticationResult = db.authenticateUser(login, password);
                     if (authenticationResult){
-
-                        List<String> recentMessages = db.getRecentMessages(50);
                         nick = db.getUserNick(login);
-
                         if (nick != null){
                             this.name = nick;
                         } else {
                             this.name = "User" + System.currentTimeMillis();
                         }
+                        out.println("Успешно! Добро пожаловать - " + this.name);
 
-                        for (String message : recentMessages){
-                            out.println(message);
+                        List<String> publicHistory = db.getRecentPublicMessages(50);
+
+                        if (!publicHistory.isEmpty()){
+                            out.println("=== Последние сообщения общего чата ===");
+                            for (String msg : publicHistory){
+                                out.println(msg);
+                            }
+                            out.println("=== Конец истории ===");
+                        } else {
+                            out.println("(Общий чат пуст)");
                         }
 
                         ChatServer.addClient(this);
                         this.login = login;
                         this.authenticated = true;
-                        out.println("Успешно! Добро пожаловать - " + this.name);
                         ChatServer.broadcast("SERVER: " + name + " присоединился к чату.", this);
 
                     } else {
@@ -210,6 +213,73 @@ public class ClientHandler implements Runnable {
                     e.printStackTrace();
                 }
                 break;
+
+            case "/history":
+                if (!authenticated){
+                    out.println("ОШИБКА - сначала войдите (/login) или зарегистрируйтесь (/register)");
+                    return;
+                }
+
+                parts = command.split(" ", 2);
+                if (parts.length < 2){
+                    List<String> publicHistory = db.getRecentPublicMessages(50);
+                    if (!publicHistory.isEmpty()){
+                        out.println("=== Последние сообщения общего чата ===");
+                        for (String msg : publicHistory){
+                            out.println(msg);
+                        }
+                        out.println("=== Конец истории ===");
+                    } else {
+                        out.println("(Общий чат пуст)");
+                    }
+
+                } else if (parts[1].equals("private")){
+                    List<String> privateHistory = db.getRecentPrivateMessages(this.login, 50);
+                    if (!privateHistory.isEmpty()){
+                        out.println("=== История приватных сообщений ===");
+                        for (String msg : privateHistory){
+                            out.println(msg);
+                        }
+                        out.println("=== Конец истории ===");
+                    } else{
+                        out.println("(История приватных сообщений пуста)");
+                    }
+                } else {
+                    String otherNick = parts[1];
+                    String otherLogin = db.getLoginByNick(otherNick);
+                    if (otherLogin == null) {
+                        out.println("ОШИБКА - пользователь с ником [" + otherNick + "] не найден.");
+                        return;
+                    }
+
+                    List<String> conversation = db.getConversation(this.login, otherLogin, 50);
+                    if (conversation.isEmpty()){
+                        out.println("(Переписка с [" + otherNick + "] пуста)" );
+                    } else{
+                        out.println("=== Переписка с " + otherNick + " ===");
+                        for (String msg: conversation){
+                            out.println(msg);
+                        }
+                        out.println("=== Конец переписки ===");
+                    }
+                }
+                break;
+
+            case "/online":
+                if (!authenticated){
+                    out.println("ОШИБКА - сначала войдите (/login) или зарегистрируйтесь (/register)");
+                }
+
+                List<String> onlineUsers = ChatServer.getAllOnlineUsersNicks();
+                Collections.sort(onlineUsers);
+                out.println("=== Список пользователей онлайн ===");
+                for (String onlineNick : onlineUsers){
+                    out.println(onlineNick);
+                }
+                out.println("=== Конец списка ===");
+                break;
+
+
 
             case "/exit":
                 out.println("До свидания, " +  this.name);
@@ -221,13 +291,26 @@ public class ClientHandler implements Runnable {
                 }
                 break;
 
-            default:
-                out.println("Неизвестная команда. Доступно: \n " +
+            case "/help":
+                out.println("Доступные команды: \n" +
                         "/nick <новое имя>\n" +
                         "/w <имя> <личное сообщение>\n" +
                         "/register <Login> <password> \n" +
                         "/login <Login> <Password>\n" +
+                        "/history - Получить историю чата\n" +
+                        "   + <Nick> - получить историю переписки с пользователем\n" +
+                        "   + private - получить историю приватных сообщений\n" +
+                        "/help - список доступных команд\n" +
                         "/exit");
+                break;
+
+
+
+            default:
+                out.println("Неизвестная команда.\n" +
+                        "/help - список доступных команд");
+
+
         }
     }
 
@@ -250,6 +333,10 @@ public class ClientHandler implements Runnable {
 
     public String getName() {
         return name;
+    }
+
+    public String getLogin(){
+        return login;
     }
 
 

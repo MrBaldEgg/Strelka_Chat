@@ -4,12 +4,15 @@ import org.mindrot.jbcrypt.BCrypt;
 
 import java.io.InputStream;
 import java.sql.*;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
 
+
 public class DatabaseManager {
+    private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm");
     private static DatabaseManager instance;
     private Connection connection;
 
@@ -56,7 +59,6 @@ public class DatabaseManager {
 
     private void createTables() throws SQLException{
         String usersTable = """
-                DROP TABLE users CASCADE;
                 CREATE TABLE IF NOT EXISTS users (
                 id SERIAL PRIMARY KEY,
                 login VARCHAR(50) UNIQUE NOT NULL,
@@ -65,7 +67,6 @@ public class DatabaseManager {
                 """;
 
         String messageTable = """
-                DROP TABLE messages CASCADE;
                 CREATE TABLE IF NOT EXISTS messages (
                 id SERIAL PRIMARY KEY,
                 sender VARCHAR(50) NOT NULL,
@@ -173,36 +174,129 @@ public class DatabaseManager {
         }
     }
 
-    public List<String> getRecentMessages (int limit){
+
+    public List<String> getRecentPublicMessages(int limit){
         List<String> messages = new ArrayList<>();
         String sqlCommand = """
-                SELECT sender, message, timestamp
-                FROM messages
-                WHERE recipient IS NULL
-                ORDER BY timestamp DESC
+                SELECT m.sender, m.message, m.timestamp, u.nick AS sender_nick
+                FROM messages m
+                LEFT JOIN users u ON m.sender = u.login
+                WHERE m.recipient IS NULL 
+                ORDER BY m.timestamp DESC 
                 LIMIT ?
                 """;
-
         try (PreparedStatement pstmt = connection.prepareStatement(sqlCommand)){
             pstmt.setInt(1, limit);
             ResultSet rs = pstmt.executeQuery();
             while (rs.next()){
-                String line = String.format("[%s] %s: %s",
-                        rs.getString("timestamp"),
-                        rs.getString("sender"),
-                        rs.getString("message")
-                        );
-                messages.add(line);
+                messages.add(formatMessage(rs));
             }
-        } catch (SQLException e ){
+        } catch (SQLException e) {
             e.printStackTrace();
         }
         Collections.reverse(messages);
         return messages;
     }
 
+    public List<String> getRecentPrivateMessages(String login, int limit){
+        List<String> messages = new ArrayList<>();
+        String sqlCommand = """
+                SELECT m.sender, m.recipient, m.message, m.timestamp,
+                us.nick AS sender_nick,
+                ur.nick AS recipient_nick
+                FROM messages m
+                LEFT JOIN users us ON m.sender = us.login
+                LEFT JOIN users ur ON m.recipient = ur.login
+                WHERE m.is_private = TRUE
+                  AND (m.sender = ? OR m.recipient = ?)
+                ORDER BY m.timestamp DESC
+                LIMIT ?
+                """;
+        try(PreparedStatement pstmt = connection.prepareStatement(sqlCommand)){
+            pstmt.setString(1, login);
+            pstmt.setString(2, login);
+            pstmt.setInt(3, limit);
+            ResultSet rs = pstmt.executeQuery();
+            while (rs.next()){
+                String senderLogin = rs.getString("sender");
+                String senderNick = rs.getString("sender_nick");
+                String recipientNick = rs.getString("recipient_nick");
+                if (senderNick == null) senderNick = senderLogin;
+                if (recipientNick == null) recipientNick = rs.getString("recipient");
+                String msg = rs.getString("message");
+                String time = rs.getTimestamp("timestamp").toLocalDateTime().format(FORMATTER);
+                String direction = senderLogin.equals(login)
+                        ? "(YOU -> " + recipientNick + ")"
+                        : "(" + senderNick + " -> YOU)";
+                messages.add(String.format("[%s] %s: %s", time, direction, msg));
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        Collections.reverse(messages);
+        return messages;
+    }
+
+    public List<String> getConversation(String login1, String login2, int limit) {
+        List<String> messages = new ArrayList<>();
+        String sqlCommand = """
+                SELECT m.sender, m.message, m.timestamp,
+                us.nick AS sender_nick
+                FROM messages m
+                LEFT JOIN users us ON m.sender = us.login
+                WHERE m.is_private = TRUE
+                AND ((m.sender = ? AND m.recipient = ?)
+                OR (m.sender = ? AND m.recipient = ?))
+                ORDER BY m.timestamp DESC
+                LIMIT ?
+                """;
+        try (PreparedStatement pstmt = connection.prepareStatement(sqlCommand)) {
+            pstmt.setString(1, login1);
+            pstmt.setString(2, login2);
+            pstmt.setString(3, login2);
+            pstmt.setString(4, login1);
+            pstmt.setInt(5, limit);
+            ResultSet rs = pstmt.executeQuery();
+            while (rs.next()) {
+                String senderLogin = rs.getString("sender");
+                String senderNick = rs.getString("sender_nick");
+                if (senderNick == null) senderNick = senderLogin;
+                String msg = rs.getString("message");
+                String time = rs.getTimestamp("timestamp").toLocalDateTime().format(FORMATTER);
+                String prefix = senderLogin.equals(login1) ? "YOU" : senderNick;
+                messages.add(String.format("[%s] %s: %s", time, prefix, msg));
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        Collections.reverse(messages);
+        return messages;
+    }
+
+    private String formatMessage(ResultSet rs) throws SQLException{
+        String time = rs.getTimestamp("timestamp").toLocalDateTime().format(FORMATTER);
+        String senderNick = rs.getString("sender");
+        if (senderNick == null){
+            senderNick = rs.getString("sende");
+        }
+        String message = rs.getString("message");
+        return String.format("[%s] %s: %s", time, senderNick, message);
+    }
 
 
-
-
+    public String getLoginByNick(String nick) {
+        String sqlCommand = """
+                SELECT login FROM users WHERE nick = ?
+                """;
+        try (PreparedStatement pstmt = connection.prepareStatement(sqlCommand)){
+            pstmt.setString(1, nick);
+            ResultSet rs = pstmt.executeQuery();
+            if (rs.next()){
+                return rs.getString("login");
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
 }
