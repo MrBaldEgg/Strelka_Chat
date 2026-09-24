@@ -158,6 +158,7 @@ public class ClientHandler implements Runnable {
                     } else {
                         out.println("ОШИБКА - такой Логин или Никнейм уже существует.");
                     }
+                    authenticateUser(db, newLogin, newPassword);
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
@@ -176,39 +177,10 @@ public class ClientHandler implements Runnable {
                 }
                 String login = parts[1];
                 String password = parts[2];
-                String nick;
 
                 try {
-                    boolean authenticationResult = db.authenticateUser(login, password);
-                    if (authenticationResult){
-                        nick = db.getUserNick(login);
-                        if (nick != null){
-                            this.name = nick;
-                        } else {
-                            this.name = "User" + System.currentTimeMillis();
-                        }
-                        out.println("Успешно! Добро пожаловать - " + this.name);
+                    authenticateUser(db, login, password);
 
-                        List<String> publicHistory = db.getRecentPublicMessages(50);
-
-                        if (!publicHistory.isEmpty()){
-                            out.println("=== Последние сообщения общего чата ===");
-                            for (String msg : publicHistory){
-                                out.println(msg);
-                            }
-                            out.println("=== Конец истории ===");
-                        } else {
-                            out.println("(Общий чат пуст)");
-                        }
-
-                        ChatServer.addClient(this);
-                        this.login = login;
-                        this.authenticated = true;
-                        ChatServer.broadcast("SERVER: " + name + " присоединился к чату.", this);
-
-                    } else {
-                        out.println("ОШИБКА - Пользователь не найден, проверьте введенные данные");
-                    }
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
@@ -291,26 +263,47 @@ public class ClientHandler implements Runnable {
                 }
                 break;
 
-            case "/help":
-                out.println("Доступные команды: \n" +
-                        "/nick <новое имя>\n" +
-                        "/w <имя> <личное сообщение>\n" +
-                        "/register <Login> <password> \n" +
-                        "/login <Login> <Password>\n" +
-                        "/history - Получить историю чата\n" +
-                        "   + <Nick> - получить историю переписки с пользователем\n" +
-                        "   + private - получить историю приватных сообщений\n" +
-                        "/help - список доступных команд\n" +
-                        "/exit");
-                break;
 
 
 
             default:
                 out.println("Неизвестная команда.\n" +
-                        "/help - список доступных команд");
+                        "/ - список доступных команд");
 
 
+        }
+    }
+
+    private void authenticateUser (DatabaseManager db, String login, String password){
+        boolean authenticationResult = db.authenticateUser(login, password);
+        if (authenticationResult){
+            String nick = db.getUserNick(login);
+            if (nick != null){
+                this.name = nick;
+            } else {
+                this.name = "User" + System.currentTimeMillis();
+            }
+            out.println("Вы вошли! Добро пожаловать - " + this.name);
+
+            List<String> publicHistory = db.getRecentPublicMessages(50);
+
+            if (!publicHistory.isEmpty()){
+                out.println("=== Последние сообщения общего чата ===");
+                for (String msg : publicHistory){
+                    out.println(msg);
+                }
+                out.println("=== Конец истории ===");
+            } else {
+                out.println("(Общий чат пуст)");
+            }
+
+            ChatServer.addClient(this);
+            this.login = login;
+            this.authenticated = true;
+            ChatServer.broadcast("SERVER: " + name + " присоединился к чату.", this);
+
+        } else {
+            out.println("ОШИБКА - Пользователь не найден, проверьте введенные данные");
         }
     }
 

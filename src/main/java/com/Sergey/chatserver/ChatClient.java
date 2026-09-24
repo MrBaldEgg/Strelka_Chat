@@ -16,16 +16,16 @@ public class ChatClient {
              PrintWriter out  = new PrintWriter(socket.getOutputStream(), true);
              BufferedReader console = new BufferedReader(new InputStreamReader(System.in))){
 
-            System.out.println("Успешное подключение к серверу");
+            System.out.println(Colors.CYAN + "Успешное подключение к серверу. Введите / для списка команд." + Colors.RESET);
 
             Thread readerThread = new Thread(() -> {
                 try{
                     String serverMessage;
                     while ((serverMessage = in.readLine()) != null){
-                        System.out.println(serverMessage);
+                        printColored(serverMessage);
                     }
                 } catch (IOException e) {
-                    System.out.println("Соединение потеряно");
+                    System.out.println(Colors.RED + "Соединение потеряно" + Colors.RESET);
                 }
             });
 
@@ -35,11 +35,54 @@ public class ChatClient {
 
             String userInput;
             while ((userInput = console.readLine()) != null ){
+
+                if (userInput.trim().equals("/")){
+                    printHelp();
+                    continue;
+                }
+
                 out.println(userInput);
+
+                if (!userInput.startsWith("/")){
+                    System.out.println(Colors.GRAY + "YOU: " + userInput + Colors.RESET );
+                }
+
             }
-            System.out.println("Отключение от сервера");
+            System.out.println(Colors.CYAN + "Отключение от сервера" + Colors.RESET);
         } catch (IOException e) {
             e.printStackTrace();
         }
+    }
+
+
+    private static void printColored(String message) {
+        String color;
+        if (message.startsWith("SERVER:")) {
+            color = Colors.YELLOW;
+        } else if (message.startsWith("(Лично")) {
+            color = Colors.GREEN;
+        } else if (message.startsWith("===")) {
+            color = Colors.CYAN;
+        } else if (message.startsWith("ОШИБКА") || message.startsWith("Ошибка")) {
+            color = Colors.RED;
+        } else {
+            color = Colors.RESET;
+        }
+        System.out.println(color + message + Colors.RESET);
+    }
+
+
+
+    private static void printHelp() {
+        System.out.println(Colors.CYAN + "Доступные команды:" + Colors.RESET);
+        System.out.println(Colors.GREEN + "  /register <логин> <пароль> <ник>" + Colors.RESET + " — регистрация");
+        System.out.println(Colors.GREEN + "  /login <логин> <пароль>" + Colors.RESET + " — вход");
+        System.out.println(Colors.GREEN + "  /nick <новый_ник>" + Colors.RESET + " — сменить ник");
+        System.out.println(Colors.GREEN + "  /w <ник> <сообщение>" + Colors.RESET + " — личное сообщение");
+        System.out.println(Colors.GREEN + "  /history" + Colors.RESET + " — история общего чата");
+        System.out.println(Colors.GREEN + "  /history private" + Colors.RESET + " — ваши личные сообщения");
+        System.out.println(Colors.GREEN + "  /history <ник>" + Colors.RESET + " — переписка с пользователем");
+        System.out.println(Colors.GREEN + "  /online" + Colors.RESET + " — список онлайн");
+        System.out.println(Colors.GREEN + "  /exit" + Colors.RESET + " — выход");
     }
 }
