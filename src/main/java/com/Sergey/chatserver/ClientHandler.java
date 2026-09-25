@@ -28,7 +28,7 @@ public class ClientHandler implements Runnable {
             out.println("SERVER: Добро пожаловать в чат \n" +
                     "Пожалуйста войдите или зарегистрируйтесь");
             out.println("Доступные команды: \n" +
-                    "/register <Login> <password> <Nick> \n" +
+                    "/register <Login> <Password> <Nick> \n" +
                     "/login <Login> <Password>\n" +
                     "/exit");
 

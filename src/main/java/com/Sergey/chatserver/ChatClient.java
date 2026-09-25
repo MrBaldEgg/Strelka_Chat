@@ -9,6 +9,7 @@ import java.net.Socket;
 public class ChatClient {
     private static final String HOST = "localhost";
     private static final int PORT = 8189;
+    private static boolean soundEnabled = true;
 
     public static void main(String[] args) {
         try (Socket socket = new Socket(HOST, PORT);
@@ -41,6 +42,12 @@ public class ChatClient {
                     continue;
                 }
 
+                if (userInput.trim().equalsIgnoreCase("/beep")){
+                    soundEnabled = !soundEnabled;
+                    System.out.println(Colors.CYAN + "Звук уведомлений " + (soundEnabled ? "ВКЛЮЧЕН" : "ВЫКЛЮЧЕН")  + Colors.RESET);
+                    continue;
+                }
+
                 out.println(userInput);
 
                 if (!userInput.startsWith("/")){
@@ -61,6 +68,9 @@ public class ChatClient {
             color = Colors.YELLOW;
         } else if (message.startsWith("(Лично")) {
             color = Colors.GREEN;
+            if (message.startsWith("(Лично от")) {
+                beep();
+            }
         } else if (message.startsWith("===")) {
             color = Colors.CYAN;
         } else if (message.startsWith("ОШИБКА") || message.startsWith("Ошибка")) {
@@ -83,6 +93,14 @@ public class ChatClient {
         System.out.println(Colors.GREEN + "  /history private" + Colors.RESET + " — ваши личные сообщения");
         System.out.println(Colors.GREEN + "  /history <ник>" + Colors.RESET + " — переписка с пользователем");
         System.out.println(Colors.GREEN + "  /online" + Colors.RESET + " — список онлайн");
+        System.out.println(Colors.GREEN + "  /beep" + Colors.RESET + " — ВКЛЮЧИТЬ / ВЫКЛЮЧИТЬ звук уведомлений");
         System.out.println(Colors.GREEN + "  /exit" + Colors.RESET + " — выход");
+    }
+
+    private static void beep(){
+        if (soundEnabled){
+            System.out.print("\u0007");
+            System.out.flush();
+        }
     }
 }
